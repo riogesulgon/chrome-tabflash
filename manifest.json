@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Flash",
+  "version": "1.0.0",
+  "description": "Jump to any open tab in the current window by typing a dynamically generated key label, inspired by vim flash.",
+  "permissions": ["tabs", "storage"],
+  "action": {
+    "default_title": "Tab Flash",
+    "default_popup": "popup.html"
+  }
+}
