@@ -36,14 +36,17 @@ async function init() {
   // Store the currently active tab as the previous tab for next time
   const currentActive = tabs.find((t) => t.active);
   if (currentActive) {
-    // Get stored previousTabId from chrome storage and update it
-    chrome.storage.session.get(["previousTabId"], (result) => {
-      if (result.previousTabId) {
+    // Get stored previousTabId from chrome storage
+    try {
+      const result = await chrome.storage.session.get(["previousTabId"]);
+      if (result.previousTabId && result.previousTabId !== currentActive.id) {
         previousTabId = result.previousTabId;
       }
-    });
-    // Store current tab as the new previous for next popup open
-    chrome.storage.session.set({ previousTabId: currentActive.id });
+      // Store current tab as the new previous for next popup open
+      await chrome.storage.session.set({ previousTabId: currentActive.id });
+    } catch (e) {
+      console.error("Storage error:", e);
+    }
   }
 
   if (tabs.length === 0) {
