@@ -36,6 +36,45 @@ body {
   z-index: 1;
 }
 
+#toolbar {
+  position: sticky;
+  top: 28px;
+  padding: 8px 6px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--row-active);
+  z-index: 1;
+  display: flex;
+  gap: 6px;
+}
+
+#merge-btn,
+#sort-btn {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg);
+  background: var(--label-bg);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#merge-btn:hover,
+#sort-btn:hover {
+  background: var(--row-active);
+}
+
+#merge-btn:active,
+#sort-btn:active {
+  background: var(--accent);
+  color: var(--bg);
+}
+
 #list {
   padding: 6px;
 }

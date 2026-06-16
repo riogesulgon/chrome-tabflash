@@ -23,26 +23,28 @@ function generateLabels(count, keys = LABEL_KEYS) {
   return labels.slice(0, count);
 }
 
-let entries = []; // [{ tab, label }]
+let allTabs = []; // All tabs in their original order
+let displayedTabs = []; // Tabs in the current sort order
+let entries = []; // [{ tab, label }] - for label lookup
 let labelToEntry = new Map();
 let typed = "";
 let selectedIndex = 0;
 let previousTabId = null;
+let sortMode = "tabOrder"; // "tabOrder" or "alphabetical"
 
 async function init() {
   const tabs = await chrome.tabs.query({ currentWindow: true });
   tabs.sort((a, b) => a.index - b.index);
+  allTabs = tabs;
 
   // Store the currently active tab as the previous tab for next time
   const currentActive = tabs.find((t) => t.active);
   if (currentActive) {
-    // Get stored previousTabId from chrome storage
     try {
       const result = await chrome.storage.session.get(["previousTabId"]);
       if (result.previousTabId && result.previousTabId !== currentActive.id) {
         previousTabId = result.previousTabId;
       }
-      // Store current tab as the new previous for next popup open
       await chrome.storage.session.set({ previousTabId: currentActive.id });
     } catch (e) {
       console.error("Storage error:", e);
@@ -54,12 +56,40 @@ async function init() {
     return;
   }
 
-  const labels = generateLabels(tabs.length);
-  entries = tabs.map((tab, i) => ({ tab, label: labels[i] }));
-  labelToEntry = new Map(entries.map((e) => [e.label, e]));
-
+  updateDisplayedTabs();
   render();
   document.addEventListener("keydown", onKeyDown, true);
+  document.getElementById("merge-btn").addEventListener("click", mergeAllWindows);
+  document.getElementById("sort-btn").addEventListener("click", toggleSort);
+}
+
+function updateDisplayedTabs() {
+  if (sortMode === "alphabetical") {
+    displayedTabs = [...allTabs].sort((a, b) => {
+      const titleA = (a.title || a.url || "(untitled)").toLowerCase();
+      const titleB = (b.title || b.url || "(untitled)").toLowerCase();
+      return titleA.localeCompare(titleB);
+    });
+  } else {
+    displayedTabs = [...allTabs];
+  }
+
+  // Generate labels for displayed tabs
+  const labels = generateLabels(displayedTabs.length);
+  entries = displayedTabs.map((tab, i) => ({ tab, label: labels[i] }));
+  labelToEntry = new Map(entries.map((e) => [e.label, e]));
+
+  // Reset selected index when sort changes
+  selectedIndex = 0;
+  typed = "";
+}
+
+function toggleSort() {
+  sortMode = sortMode === "tabOrder" ? "alphabetical" : "tabOrder";
+  const btn = document.getElementById("sort-btn");
+  btn.textContent = sortMode === "alphabetical" ? "Sort: Alphabetical" : "Sort: Tab order";
+  updateDisplayedTabs();
+  render();
 }
 
 function render() {
@@ -169,6 +199,23 @@ function onKeyDown(e) {
     return;
   }
 
+  if (key === "Shift" && e.shiftKey) {
+    // Let shift be processed with the next key
+    return;
+  }
+
+  if (e.shiftKey && key.toUpperCase() === "M") {
+    e.preventDefault();
+    mergeAllWindows();
+    return;
+  }
+
+  if (e.shiftKey && key.toUpperCase() === "S") {
+    e.preventDefault();
+    toggleSort();
+    return;
+  }
+
   if (key.length === 1 && /[a-z]/i.test(key)) {
     e.preventDefault();
     const lowerKey = key.toLowerCase();
@@ -203,6 +250,42 @@ async function activate(tab) {
   await chrome.tabs.update(tab.id, { active: true });
   await chrome.windows.update(tab.windowId, { focused: true });
   window.close();
+}
+
+async function mergeAllWindows() {
+  const btn = document.getElementById("merge-btn");
+  btn.disabled = true;
+  btn.textContent = "Merging...";
+
+  try {
+    const currentWindow = await chrome.windows.getCurrent();
+    const allWindows = await chrome.windows.getAll();
+    const otherWindows = allWindows.filter((w) => w.id !== currentWindow.id);
+
+    if (otherWindows.length === 0) {
+      btn.textContent = "No other windows";
+      setTimeout(() => {
+        btn.textContent = "Merge all windows";
+        btn.disabled = false;
+      }, 2000);
+      return;
+    }
+
+    for (const win of otherWindows) {
+      const tabs = await chrome.tabs.query({ windowId: win.id });
+      const tabIds = tabs.map((t) => t.id);
+      await chrome.tabs.move(tabIds, { windowId: currentWindow.id, index: -1 });
+    }
+
+    btn.textContent = "Merged!";
+    setTimeout(() => {
+      window.close();
+    }, 500);
+  } catch (e) {
+    console.error("Merge error:", e);
+    btn.textContent = "Error merging";
+    btn.disabled = false;
+  }
 }
 
 init();
