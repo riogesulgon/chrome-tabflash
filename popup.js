@@ -61,6 +61,7 @@ async function init() {
   document.addEventListener("keydown", onKeyDown, true);
   document.getElementById("merge-btn").addEventListener("click", mergeAllWindows);
   document.getElementById("sort-btn").addEventListener("click", toggleSort);
+  document.getElementById("new-window-btn").addEventListener("click", openSelectedInNewWindow);
 }
 
 function updateDisplayedTabs() {
@@ -90,6 +91,17 @@ function toggleSort() {
   btn.textContent = sortMode === "alphabetical" ? "Sort: Alphabetical" : "Sort: Tab order";
   updateDisplayedTabs();
   render();
+}
+
+function getCurrentTargetTab() {
+  if (typed) {
+    const exact = labelToEntry.get(typed);
+    return exact ? exact.tab : null;
+  }
+  if (selectedIndex >= 0 && selectedIndex < entries.length) {
+    return entries[selectedIndex].tab;
+  }
+  return null;
 }
 
 function render() {
@@ -186,15 +198,9 @@ function onKeyDown(e) {
 
   if (key === "Enter") {
     e.preventDefault();
-    if (typed) {
-      const exact = labelToEntry.get(typed);
-      if (exact) {
-        activate(exact.tab);
-      }
-    } else {
-      if (selectedIndex >= 0 && selectedIndex < entries.length) {
-        activate(entries[selectedIndex].tab);
-      }
+    const targetTab = getCurrentTargetTab();
+    if (targetTab) {
+      activate(targetTab);
     }
     return;
   }
@@ -213,6 +219,12 @@ function onKeyDown(e) {
   if (e.shiftKey && key.toUpperCase() === "S") {
     e.preventDefault();
     toggleSort();
+    return;
+  }
+
+  if (e.shiftKey && key.toUpperCase() === "N") {
+    e.preventDefault();
+    openSelectedInNewWindow();
     return;
   }
 
@@ -250,6 +262,36 @@ async function activate(tab) {
   await chrome.tabs.update(tab.id, { active: true });
   await chrome.windows.update(tab.windowId, { focused: true });
   window.close();
+}
+
+async function openSelectedInNewWindow() {
+  const btn = document.getElementById("new-window-btn");
+  const targetTab = getCurrentTargetTab();
+
+  if (!targetTab) {
+    const originalText = btn.textContent;
+    btn.textContent = "No exact selection";
+    setTimeout(() => {
+      btn.textContent = originalText;
+    }, 1200);
+    return;
+  }
+
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = "Opening...";
+
+  try {
+    await chrome.windows.create({ tabId: targetTab.id, focused: true });
+    window.close();
+  } catch (e) {
+    console.error("Open in new window error:", e);
+    btn.textContent = "Error opening";
+    setTimeout(() => {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }, 1200);
+  }
 }
 
 async function mergeAllWindows() {

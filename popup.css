@@ -48,7 +48,8 @@ body {
 }
 
 #merge-btn,
-#sort-btn {
+#sort-btn,
+#new-window-btn {
   flex: 1;
   padding: 8px 10px;
   font-size: 12px;
@@ -65,12 +66,14 @@ body {
 }
 
 #merge-btn:hover,
-#sort-btn:hover {
+#sort-btn:hover,
+#new-window-btn:hover {
   background: var(--row-active);
 }
 
 #merge-btn:active,
-#sort-btn:active {
+#sort-btn:active,
+#new-window-btn:active {
   background: var(--accent);
   color: var(--bg);
 }
