@@ -30,7 +30,8 @@ let labelToEntry = new Map();
 let typed = "";
 let selectedIndex = 0;
 let previousTabId = null;
-let sortMode = "tabOrder"; // "tabOrder" or "alphabetical"
+let sortMode = "alphabetical"; // "tabOrder" or "alphabetical"
+let operatorMode = null; // null, "new-window", or other operators
 
 async function init() {
   const tabs = await chrome.tabs.query({ currentWindow: true });
@@ -61,7 +62,10 @@ async function init() {
   document.addEventListener("keydown", onKeyDown, true);
   document.getElementById("merge-btn").addEventListener("click", mergeAllWindows);
   document.getElementById("sort-btn").addEventListener("click", toggleSort);
-  document.getElementById("new-window-btn").addEventListener("click", openSelectedInNewWindow);
+  document.getElementById("new-window-btn").addEventListener("click", () => {
+    enterOperatorMode("new-window");
+  });
+  document.getElementById("sort-btn").textContent = "Sort: Alphabetical";
 }
 
 function updateDisplayedTabs() {
@@ -90,6 +94,26 @@ function toggleSort() {
   const btn = document.getElementById("sort-btn");
   btn.textContent = sortMode === "alphabetical" ? "Sort: Alphabetical" : "Sort: Tab order";
   updateDisplayedTabs();
+  render();
+}
+
+function enterOperatorMode(mode) {
+  operatorMode = mode;
+  typed = "";
+  selectedIndex = 0;
+  const hint = document.getElementById("hint");
+  if (mode === "new-window") {
+    hint.textContent = "Press the label to open in new window · Esc to cancel";
+  }
+  render();
+}
+
+function exitOperatorMode() {
+  operatorMode = null;
+  typed = "";
+  selectedIndex = 0;
+  const hint = document.getElementById("hint");
+  hint.textContent = "Type the highlighted key(s) to jump · Esc to close";
   render();
 }
 
@@ -143,7 +167,11 @@ function render() {
 
     row.append(labelEl, fav, title);
     row.addEventListener("click", () => {
-      activate(entries[i].tab);
+      if (operatorMode === "new-window") {
+        openTabInNewWindow(entries[i].tab);
+      } else {
+        activate(entries[i].tab);
+      }
     });
     list.appendChild(row);
   }
@@ -160,6 +188,74 @@ function render() {
 function onKeyDown(e) {
   const key = e.key;
 
+  // In operator mode, most keys are reserved for label typing
+  if (operatorMode) {
+    if (key === "Escape") {
+      e.preventDefault();
+      if (typed) {
+        typed = "";
+        render();
+      } else {
+        exitOperatorMode();
+      }
+      return;
+    }
+
+    if (key === "Backspace") {
+      e.preventDefault();
+      typed = typed.slice(0, -1);
+      render();
+      return;
+    }
+
+    if (key === "ArrowDown") {
+      e.preventDefault();
+      selectedIndex = (selectedIndex + 1) % entries.length;
+      render();
+      return;
+    }
+
+    if (key === "ArrowUp") {
+      e.preventDefault();
+      selectedIndex = (selectedIndex - 1 + entries.length) % entries.length;
+      render();
+      return;
+    }
+
+    if (key === "Enter") {
+      e.preventDefault();
+      const targetTab = getCurrentTargetTab();
+      if (targetTab) {
+        if (operatorMode === "new-window") {
+          openTabInNewWindow(targetTab);
+        }
+      }
+      return;
+    }
+
+    if (key.length === 1 && /[a-z]/i.test(key)) {
+      e.preventDefault();
+      const lowerKey = key.toLowerCase();
+      const next = typed + lowerKey;
+
+      const exact = labelToEntry.get(next);
+      if (exact) {
+        if (operatorMode === "new-window") {
+          openTabInNewWindow(exact.tab);
+        }
+        return;
+      }
+
+      const hasPrefix = entries.some((en) => en.label.startsWith(next));
+      if (hasPrefix) {
+        typed = next;
+        render();
+      }
+    }
+    return;
+  }
+
+  // Normal mode (not in operator mode)
   if (key === "Escape") {
     e.preventDefault();
     if (typed) {
@@ -224,7 +320,7 @@ function onKeyDown(e) {
 
   if (e.shiftKey && key.toUpperCase() === "N") {
     e.preventDefault();
-    openSelectedInNewWindow();
+    enterOperatorMode("new-window");
     return;
   }
 
@@ -264,33 +360,15 @@ async function activate(tab) {
   window.close();
 }
 
-async function openSelectedInNewWindow() {
-  const btn = document.getElementById("new-window-btn");
-  const targetTab = getCurrentTargetTab();
-
-  if (!targetTab) {
-    const originalText = btn.textContent;
-    btn.textContent = "No exact selection";
-    setTimeout(() => {
-      btn.textContent = originalText;
-    }, 1200);
-    return;
-  }
-
-  btn.disabled = true;
-  const originalText = btn.textContent;
-  btn.textContent = "Opening...";
-
+async function openTabInNewWindow(tab) {
+  document.removeEventListener("keydown", onKeyDown, true);
   try {
-    await chrome.windows.create({ tabId: targetTab.id, focused: true });
+    await chrome.windows.create({ tabId: tab.id, focused: true });
     window.close();
   } catch (e) {
     console.error("Open in new window error:", e);
-    btn.textContent = "Error opening";
-    setTimeout(() => {
-      btn.textContent = originalText;
-      btn.disabled = false;
-    }, 1200);
+    document.addEventListener("keydown", onKeyDown, true);
+    exitOperatorMode();
   }
 }
 
